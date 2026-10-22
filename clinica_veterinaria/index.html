@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Dashboard</h1>
+      <div class="topbar-actions">
+        <span id="dataHoje" class="text-muted"></span>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <!-- Stat cards -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-label">Carregando…</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;flex-wrap:wrap" class="two-col-grid">
+        <!-- Próximos agendamentos -->
+        <div class="card" style="grid-column:1">
+          <div class="card-title"><span class="icon" id="iconAgenda"></span> Próximos Agendamentos</div>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Data/Hora</th><th>Paciente</th><th>Veterinário</th><th>Status</th></tr></thead>
+              <tbody id="tblProximos">
+                <tr><td colspan="4" class="text-center text-muted" style="padding:20px">Carregando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Acesso rápido -->
+        <div class="card" style="grid-column:2">
+          <div class="card-title"><span class="icon" id="iconRapido"></span> Acesso Rápido</div>
+          <div style="display:flex;flex-direction:column;gap:8px" id="acessoRapido"></div>
+        </div>
+      </div>
+
+      <!-- Ranking de consultas por veterinário -->
+      <div class="card" style="margin-top:18px">
+        <div class="card-title"><span class="icon" id="iconRanking"></span> Consultas por Veterinário
+          <span class="text-muted" style="font-size:.75rem;font-weight:400;margin-left:8px">
+            quem mais atendeu no período
+          </span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px">#</th>
+                <th>Veterinário</th>
+                <th>Especialidade</th>
+                <th style="width:160px">Total de Consultas</th>
+                <th style="width:220px">Participação</th>
+              </tr>
+            </thead>
+            <tbody id="tblRanking">
+              <tr><td colspan="5" class="text-center text-muted" style="padding:20px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted mt-2" style="font-size:.78rem">
+          Apenas veterinários com pelo menos uma consulta registrada são exibidos
+          (filtro <code>HAVING COUNT &gt; 0</code>).
+        </p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('dashboard');
+initNav('dashboard');
+
+document.getElementById('iconAgenda').innerHTML = ICONS.agendamentos;
+document.getElementById('iconRapido').innerHTML = ICONS.dashboard;
+document.getElementById('iconRanking').innerHTML = ICONS.veterinarios;
+document.getElementById('acessoRapido').innerHTML = `
+  <a href="clientes.html" class="btn btn-outline" style="justify-content:flex-start"><span style="width:16px;height:16px;display:inline-flex">${ICONS.clientes}</span> Gerenciar Clientes</a>
+  <a href="pacientes.html" class="btn btn-outline" style="justify-content:flex-start"><span style="width:16px;height:16px;display:inline-flex">${ICONS.pacientes}</span> Gerenciar Pacientes</a>
+  <a href="veterinarios.html" class="btn btn-outline" style="justify-content:flex-start"><span style="width:16px;height:16px;display:inline-flex">${ICONS.veterinarios}</span> Gerenciar Veterinários</a>
+  <a href="agendamentos.html" class="btn btn-outline" style="justify-content:flex-start"><span style="width:16px;height:16px;display:inline-flex">${ICONS.agendamentos}</span> Novo Agendamento</a>
+  <a href="consultas.html" class="btn btn-outline" style="justify-content:flex-start"><span style="width:16px;height:16px;display:inline-flex">${ICONS.consultas}</span> Registrar Consulta</a>
+`;
+
+// Data de hoje
+const hoje = new Date();
+document.getElementById('dataHoje').textContent =
+  hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+async function carregarDashboard() {
+  try {
+    const d = await api('/dashboard');
+    const t = d.totais;
+
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-icon">${ICONS.clientes}</div>
+        <div class="stat-value">${t.clientes}</div>
+        <div class="stat-label">Clientes</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">${ICONS.pacientes}</div>
+        <div class="stat-value">${t.pacientes}</div>
+        <div class="stat-label">Pacientes</div>
+      </div>
+      <div class="stat-card cyan">
+        <div class="stat-icon">${ICONS.veterinarios}</div>
+        <div class="stat-value">${t.veterinarios}</div>
+        <div class="stat-label">Veterinários Ativos</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-icon">${ICONS.agendamentos}</div>
+        <div class="stat-value">${t.agendamentos_hoje}</div>
+        <div class="stat-label">Agendamentos Hoje</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-icon">${ICONS.consultas}</div>
+        <div class="stat-value">${t.consultas_mes}</div>
+        <div class="stat-label">Consultas no Mês</div>
+      </div>
+    `;
+
+    const proximos = d.proximos;
+    document.getElementById('tblProximos').innerHTML = proximos.length
+      ? proximos.map(a => `<tr>
+          <td>${fmtDateTime(a.data_hora)}</td>
+          <td>${escapeHtml(a.paciente)}</td>
+          <td>${escapeHtml(a.veterinario)}</td>
+          <td>${STATUS_BADGE[a.status] || a.status}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4">
+          <div class="empty-state"><div class="empty-icon">${ICONS.agendamentos}</div><p>Nenhum agendamento futuro.</p></div>
+         </td></tr>`;
+
+    // Ranking — GROUP BY + COUNT + HAVING
+    const ranking = d.ranking || [];
+    const maxConsultas = ranking.length ? ranking[0].total_consultas : 1;
+    document.getElementById('tblRanking').innerHTML = ranking.length
+      ? ranking.map((r, i) => {
+          const pct = Math.round((r.total_consultas / maxConsultas) * 100);
+          const cores = ['badge-primary', 'badge-success', 'badge-warning', 'badge-cyan', 'badge-gray'];
+          const cor   = cores[i] || 'badge-gray';
+          return `<tr>
+            <td><span class="badge ${cor}">${i + 1}º</span></td>
+            <td><strong>${escapeHtml(r.veterinario)}</strong></td>
+            <td class="text-muted">${r.especialidade || '—'}</td>
+            <td style="font-weight:700;font-size:1.05rem">${r.total_consultas}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;background:var(--gray-200);border-radius:999px;height:8px;overflow:hidden">
+                  <div style="width:${pct}%;background:var(--primary);height:100%;border-radius:999px;transition:width .4s"></div>
+                </div>
+                <span class="text-muted" style="font-size:.78rem;min-width:34px">${pct}%</span>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="5">
+          <div class="empty-state"><div class="empty-icon">${ICONS.veterinarios}</div><p>Nenhuma consulta registrada ainda.</p></div>
+         </td></tr>`;
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+carregarDashboard();
+</script>
+</body>
+</html>

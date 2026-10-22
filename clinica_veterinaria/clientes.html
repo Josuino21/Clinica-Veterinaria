@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clientes — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Clientes / Tutores</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="abrirModal()">+ Novo Cliente</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="card">
+        <div class="search-bar">
+          <input class="search-input" id="busca" placeholder="Buscar por nome ou CPF…" oninput="debounce(carregar)">
+          <button class="btn btn-outline" onclick="carregar()">Buscar</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Nome</th>
+                <th>CPF</th>
+                <th>Telefone</th>
+                <th>E-mail</th>
+                <th>Endereço</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="7" class="text-center text-muted" style="padding:28px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="totalInfo" class="text-muted mt-2"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Novo / Editar -->
+<div class="modal-overlay" id="modalCliente">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Novo Cliente</h2>
+      <button class="modal-close" onclick="closeModal('modalCliente')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="formCliente">
+        <input type="hidden" id="clienteId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nome completo *</label>
+            <input type="text" id="nome" placeholder="Ex.: Maria Silva" required>
+          </div>
+          <div class="form-group">
+            <label>CPF *</label>
+            <input type="text" id="cpf" placeholder="000.000.000-00" maxlength="14" inputmode="numeric" required>
+          </div>
+          <div class="form-group">
+            <label>Telefone</label>
+            <input type="text" id="telefone" placeholder="(00) 00000-0000" maxlength="15" inputmode="tel">
+          </div>
+          <div class="form-group">
+            <label>E-mail</label>
+            <input type="email" id="email" placeholder="email@exemplo.com">
+          </div>
+          <div class="form-group form-full">
+            <label>Endereço</label>
+            <input type="text" id="endereco" placeholder="Rua, número, bairro, cidade">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalCliente')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvar" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal-overlay" id="modalExcluir">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>Confirmar Exclusão</h2>
+      <button class="modal-close" onclick="closeModal('modalExcluir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Tem certeza que deseja excluir o cliente <strong id="nomeExcluir"></strong>?</p>
+      <p class="text-muted mt-1">Esta ação não pode ser desfeita. Clientes com pacientes vinculados não podem ser excluídos.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalExcluir')">Cancelar</button>
+      <button class="btn btn-danger" id="btnConfirmarExcluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('clientes');
+initNav('clientes');
+
+let debounceTimer;
+function debounce(fn) { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, 350); }
+
+async function carregar() {
+  const busca = document.getElementById('busca').value.trim();
+  const qs = busca ? `?busca=${encodeURIComponent(busca)}` : '';
+  try {
+    const lista = await api('/clientes' + qs);
+    const tbody = document.getElementById('tbody');
+    document.getElementById('totalInfo').textContent = `${lista.length} registro(s) encontrado(s).`;
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="7">
+        <div class="empty-state"><div class="empty-icon">${ICONS.clientes}</div><p>Nenhum cliente encontrado.</p></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(c => `
+      <tr>
+        <td class="text-muted">${c.id_cliente}</td>
+        <td><strong>${escapeHtml(c.nome)}</strong></td>
+        <td>${fmtCPF(c.cpf)}</td>
+        <td>${c.telefone ? fmtTelefone(c.telefone) : '<span class="text-muted">—</span>'}</td>
+        <td>${c.email ? escapeHtml(c.email) : '<span class="text-muted">—</span>'}</td>
+        <td>${c.endereco ? escapeHtml(c.endereco) : '<span class="text-muted">—</span>'}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-outline btn-sm btn-icon" title="Editar" onclick="editar(${c.id_cliente})">${ICONS.edit}</button>
+            ${isAdmin() ? `<button class="btn btn-danger  btn-sm btn-icon" title="Excluir" onclick="confirmarExcluir(${c.id_cliente},${escapeJsAttr(c.nome)})">${ICONS.trash}</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function abrirModal(dados = null) {
+  document.getElementById('formCliente').reset();
+  document.getElementById('clienteId').value = '';
+  document.getElementById('modalTitulo').textContent = 'Novo Cliente';
+  if (dados) {
+    document.getElementById('modalTitulo').textContent = 'Editar Cliente';
+    document.getElementById('clienteId').value  = dados.id_cliente;
+    document.getElementById('nome').value       = dados.nome       || '';
+    document.getElementById('cpf').value        = dados.cpf        || '';
+    document.getElementById('telefone').value   = dados.telefone   || '';
+    document.getElementById('email').value      = dados.email      || '';
+    document.getElementById('endereco').value   = dados.endereco   || '';
+  }
+  openModal('modalCliente');
+}
+
+async function editar(id) {
+  try {
+    const dados = await api('/clientes/' + id);
+    abrirModal(dados);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function salvar() {
+  const id   = document.getElementById('clienteId').value;
+  const body = {
+    nome:      document.getElementById('nome').value.trim(),
+    cpf:       document.getElementById('cpf').value.replace(/\D/g, ''),
+    telefone:  document.getElementById('telefone').value.trim(),
+    email:     document.getElementById('email').value.trim(),
+    endereco:  document.getElementById('endereco').value.trim(),
+  };
+  if (!body.nome || !body.cpf) { toast('Nome e CPF são obrigatórios.', 'error'); return; }
+  if (!cpfValido(body.cpf)) { toast('Informe um CPF válido.', 'error'); return; }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (id) {
+      await api('/clientes/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Cliente atualizado com sucesso!');
+    } else {
+      await api('/clientes', { method: 'POST', body: JSON.stringify(body) });
+      toast('Cliente cadastrado com sucesso!');
+    }
+    closeModal('modalCliente');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let idParaExcluir = null;
+function confirmarExcluir(id, nome) {
+  idParaExcluir = id;
+  document.getElementById('nomeExcluir').textContent = nome;
+  openModal('modalExcluir');
+}
+
+document.getElementById('btnConfirmarExcluir').addEventListener('click', async () => {
+  if (!idParaExcluir) return;
+  try {
+    await api('/clientes/' + idParaExcluir, { method: 'DELETE' });
+    toast('Cliente excluído.');
+    closeModal('modalExcluir');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+    closeModal('modalExcluir');
+  } finally {
+    idParaExcluir = null;
+  }
+});
+
+carregar();
+
+document.getElementById('cpf').addEventListener('input', event => {
+  const digits = event.target.value.replace(/\D/g, '').slice(0, 11);
+  event.target.value = digits ? fmtCPF(digits) : '';
+});
+document.getElementById('telefone').addEventListener('input', event => {
+  const digits = event.target.value.replace(/\D/g, '').slice(0, 11);
+  event.target.value = digits ? fmtTelefone(digits) : '';
+});
+</script>
+</body>
+</html>

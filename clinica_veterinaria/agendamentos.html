@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agendamentos — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Agendamentos</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="abrirModal()">+ Novo Agendamento</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="card">
+        <!-- Filtros -->
+        <div class="search-bar">
+          <div class="form-group" style="flex:0 0 auto">
+            <select id="filtroStatus" onchange="carregar()" style="padding:8px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:.88rem">
+              <option value="">Todos os status</option>
+              <option value="agendado">Agendado</option>
+              <option value="confirmado">Confirmado</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="realizado">Realizado</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0 0 auto">
+            <input type="date" id="filtroData" onchange="carregar()" style="padding:8px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:.88rem">
+          </div>
+          <button class="btn btn-outline" onclick="limparFiltros()">Limpar filtros</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Data / Hora</th>
+                <th>Paciente</th>
+                <th>Tutor</th>
+                <th>Veterinário</th>
+                <th>Motivo</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="8" class="text-center text-muted" style="padding:28px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="totalInfo" class="text-muted mt-2"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Novo / Editar -->
+<div class="modal-overlay" id="modalAg">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Novo Agendamento</h2>
+      <button class="modal-close" onclick="closeModal('modalAg')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="formAg">
+        <input type="hidden" id="agId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Paciente *</label>
+            <select id="id_paciente" required>
+              <option value="">— Selecione o paciente —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Veterinário *</label>
+            <select id="id_veterinario" required>
+              <option value="">— Selecione o veterinário —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Data e Hora *</label>
+            <input type="datetime-local" id="data_hora" required>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="status">
+              <option value="agendado">Agendado</option>
+              <option value="confirmado">Confirmado</option>
+              <option value="cancelado">Cancelado</option>
+              <option value="realizado">Realizado</option>
+            </select>
+          </div>
+          <div class="form-group form-full">
+            <label>Motivo</label>
+            <input type="text" id="motivo" placeholder="Ex.: Consulta de rotina, Vacinação…">
+          </div>
+          <div class="form-group form-full">
+            <label>Observações</label>
+            <textarea id="observacoes" placeholder="Informações adicionais…"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalAg')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvar" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal-overlay" id="modalExcluir">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>Confirmar Exclusão</h2>
+      <button class="modal-close" onclick="closeModal('modalExcluir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Deseja excluir o agendamento de <strong id="nomeExcluir"></strong>?</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalExcluir')">Cancelar</button>
+      <button class="btn btn-danger" id="btnConfirmarExcluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('agendamentos');
+initNav('agendamentos');
+
+async function carregar() {
+  const status = document.getElementById('filtroStatus').value;
+  const data   = document.getElementById('filtroData').value;
+  let qs = [];
+  if (status) qs.push('status=' + status);
+  if (data)   qs.push('data=' + data);
+  const query = qs.length ? '?' + qs.join('&') : '';
+
+  try {
+    const lista = await api('/agendamentos' + query);
+    const tbody = document.getElementById('tbody');
+    document.getElementById('totalInfo').textContent = `${lista.length} agendamento(s).`;
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="8">
+        <div class="empty-state"><div class="empty-icon">${ICONS.agendamentos}</div><p>Nenhum agendamento encontrado.</p></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(a => `
+      <tr>
+        <td class="text-muted">${a.id_agendamento}</td>
+        <td><strong>${fmtDateTime(a.data_hora)}</strong></td>
+        <td>${escapeHtml(a.paciente)}</td>
+        <td class="text-muted">${escapeHtml(a.dono)}</td>
+        <td>${escapeHtml(a.veterinario)}</td>
+        <td>${a.motivo ? escapeHtml(a.motivo) : '<span class="text-muted">—</span>'}</td>
+        <td>${STATUS_BADGE[a.status] || escapeHtml(a.status)}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-outline btn-sm btn-icon" title="Editar"  onclick="editar(${a.id_agendamento})">${ICONS.edit}</button>
+            ${isAdmin() ? `<button class="btn btn-danger  btn-sm btn-icon" title="Excluir" onclick="confirmarExcluir(${a.id_agendamento},${escapeJsAttr(a.paciente)})">${ICONS.trash}</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function limparFiltros() {
+  document.getElementById('filtroStatus').value = '';
+  document.getElementById('filtroData').value   = '';
+  carregar();
+}
+
+async function carregarSelects() {
+  const [pacs, vets] = await Promise.all([
+    api('/pacientes'),
+    api('/veterinarios')
+  ]);
+  document.getElementById('id_paciente').innerHTML =
+    '<option value="">— Selecione o paciente —</option>' +
+    pacs.map(p => `<option value="${p.id_paciente}">${escapeHtml(p.nome)} (${escapeHtml(p.dono)})</option>`).join('');
+  document.getElementById('id_veterinario').innerHTML =
+    '<option value="">— Selecione o veterinário —</option>' +
+    vets.filter(v => v.ativo == 1)
+        .map(v => `<option value="${v.id_veterinario}">${escapeHtml(v.nome)}</option>`).join('');
+}
+
+async function abrirModal(dados = null) {
+  await carregarSelects();
+  document.getElementById('formAg').reset();
+  document.getElementById('agId').value = '';
+  document.getElementById('modalTitulo').textContent = 'Novo Agendamento';
+  document.getElementById('status').value = 'agendado';
+  if (dados) {
+    document.getElementById('modalTitulo').textContent   = 'Editar Agendamento';
+    document.getElementById('agId').value                = dados.id_agendamento;
+    document.getElementById('id_paciente').value         = dados.id_paciente;
+    document.getElementById('id_veterinario').value      = dados.id_veterinario;
+    document.getElementById('data_hora').value           = (dados.data_hora || '').replace(' ', 'T').slice(0, 16);
+    document.getElementById('motivo').value              = dados.motivo      || '';
+    document.getElementById('status').value              = dados.status      || 'agendado';
+    document.getElementById('observacoes').value         = dados.observacoes || '';
+  }
+  openModal('modalAg');
+}
+
+async function editar(id) {
+  try {
+    const dados = await api('/agendamentos/' + id);
+    abrirModal(dados);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function salvar() {
+  const id   = document.getElementById('agId').value;
+  const body = {
+    id_paciente:    document.getElementById('id_paciente').value,
+    id_veterinario: document.getElementById('id_veterinario').value,
+    data_hora:      document.getElementById('data_hora').value.replace('T', ' '),
+    motivo:         document.getElementById('motivo').value.trim(),
+    status:         document.getElementById('status').value,
+    observacoes:    document.getElementById('observacoes').value.trim(),
+  };
+  if (!body.id_paciente || !body.id_veterinario || !body.data_hora) {
+    toast('Paciente, veterinário e data são obrigatórios.', 'error'); return;
+  }
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (id) {
+      await api('/agendamentos/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Agendamento atualizado!');
+    } else {
+      await api('/agendamentos', { method: 'POST', body: JSON.stringify(body) });
+      toast('Agendamento criado!');
+    }
+    closeModal('modalAg');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let idParaExcluir = null;
+function confirmarExcluir(id, nome) {
+  idParaExcluir = id;
+  document.getElementById('nomeExcluir').textContent = nome;
+  openModal('modalExcluir');
+}
+document.getElementById('btnConfirmarExcluir').addEventListener('click', async () => {
+  try {
+    await api('/agendamentos/' + idParaExcluir, { method: 'DELETE' });
+    toast('Agendamento excluído.');
+    closeModal('modalExcluir');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+    closeModal('modalExcluir');
+  } finally { idParaExcluir = null; }
+});
+
+carregar();
+</script>
+</body>
+</html>

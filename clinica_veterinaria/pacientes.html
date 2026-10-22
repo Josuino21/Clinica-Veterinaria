@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pacientes — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Pacientes / Animais</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="abrirModal()">+ Novo Paciente</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="card">
+        <div class="search-bar">
+          <input class="search-input" id="busca" placeholder="Buscar por nome, espécie ou tutor…" oninput="debounce(carregar)">
+          <button class="btn btn-outline" onclick="carregar()">Buscar</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Animal</th>
+                <th>Espécie / Raça</th>
+                <th>Sexo</th>
+                <th>Nascimento</th>
+                <th>Peso</th>
+                <th>Tutor</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="8" class="text-center text-muted" style="padding:28px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="totalInfo" class="text-muted mt-2"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Novo / Editar -->
+<div class="modal-overlay" id="modalPaciente">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Novo Paciente</h2>
+      <button class="modal-close" onclick="closeModal('modalPaciente')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="formPaciente">
+        <input type="hidden" id="pacienteId">
+        <div class="form-grid">
+          <div class="form-group form-full">
+            <label>Tutor (Cliente) *</label>
+            <select id="id_cliente" required>
+              <option value="">— Selecione o tutor —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nome do animal *</label>
+            <input type="text" id="nome" placeholder="Ex.: Rex" required>
+          </div>
+          <div class="form-group">
+            <label>Espécie *</label>
+            <input type="text" id="especie" placeholder="Ex.: Cão, Gato, Ave…" required>
+          </div>
+          <div class="form-group">
+            <label>Raça</label>
+            <input type="text" id="raca" placeholder="Ex.: Labrador">
+          </div>
+          <div class="form-group">
+            <label>Sexo</label>
+            <select id="sexo">
+              <option value="M">Macho</option>
+              <option value="F">Fêmea</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Data de Nascimento</label>
+            <input type="date" id="data_nascimento">
+          </div>
+          <div class="form-group">
+            <label>Peso (kg)</label>
+            <input type="number" id="peso" step="0.01" min="0" placeholder="Ex.: 4.5">
+          </div>
+          <div class="form-group form-full">
+            <label>Observações</label>
+            <textarea id="observacoes" placeholder="Alergias, comportamento, vacinas em dia…"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalPaciente')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvar" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Histórico -->
+<div class="modal-overlay" id="modalHistorico">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-header">
+      <h2 id="historicoTitulo">Histórico de Consultas</h2>
+      <button class="modal-close" onclick="closeModal('modalHistorico')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="historicoConteudo">Carregando…</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalHistorico')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal-overlay" id="modalExcluir">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>Confirmar Exclusão</h2>
+      <button class="modal-close" onclick="closeModal('modalExcluir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Deseja excluir o paciente <strong id="nomeExcluir"></strong>?</p>
+      <p class="text-muted mt-1">Pacientes com consultas ou agendamentos vinculados não podem ser excluídos.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalExcluir')">Cancelar</button>
+      <button class="btn btn-danger" id="btnConfirmarExcluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('pacientes');
+initNav('pacientes');
+
+let debounceTimer;
+function debounce(fn) { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, 350); }
+
+let clientes = [];
+
+async function carregarClientes() {
+  clientes = await api('/clientes');
+  const sel = document.getElementById('id_cliente');
+  sel.innerHTML = '<option value="">— Selecione o tutor —</option>' +
+    clientes.map(c => `<option value="${c.id_cliente}">${escapeHtml(c.nome)}</option>`).join('');
+}
+
+async function carregar() {
+  const busca = document.getElementById('busca').value.trim();
+  const qs = busca ? `?busca=${encodeURIComponent(busca)}` : '';
+  try {
+    const lista = await api('/pacientes' + qs);
+    const tbody = document.getElementById('tbody');
+    document.getElementById('totalInfo').textContent = `${lista.length} registro(s) encontrado(s).`;
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="8">
+        <div class="empty-state"><div class="empty-icon">${ICONS.pacientes}</div><p>Nenhum paciente encontrado.</p></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(p => `
+      <tr>
+        <td class="text-muted">${p.id_paciente}</td>
+        <td><strong>${escapeHtml(p.nome)}</strong></td>
+        <td>${escapeHtml(p.especie)}${p.raca ? ' · <span class="text-muted">' + escapeHtml(p.raca) + '</span>' : ''}</td>
+        <td><span class="badge ${p.sexo==='M'?'badge-primary':'badge-cyan'}">${p.sexo === 'M' ? 'Macho' : 'Fêmea'}</span></td>
+        <td>${fmtDate(p.data_nascimento)}</td>
+        <td>${p.peso ? p.peso + ' kg' : '<span class="text-muted">—</span>'}</td>
+        <td>${escapeHtml(p.dono)}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-outline btn-sm btn-icon" title="Histórico" onclick="verHistorico(${p.id_paciente},${escapeJsAttr(p.nome)})">${ICONS.history}</button>
+            <button class="btn btn-outline btn-sm btn-icon" title="Editar"    onclick="editar(${p.id_paciente})">${ICONS.edit}</button>
+            ${isAdmin() ? `<button class="btn btn-danger  btn-sm btn-icon" title="Excluir" onclick="confirmarExcluir(${p.id_paciente},${escapeJsAttr(p.nome)})">${ICONS.trash}</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function abrirModal(dados = null) {
+  await carregarClientes();
+  document.getElementById('formPaciente').reset();
+  document.getElementById('pacienteId').value = '';
+  document.getElementById('modalTitulo').textContent = 'Novo Paciente';
+  if (dados) {
+    document.getElementById('modalTitulo').textContent = 'Editar Paciente';
+    document.getElementById('pacienteId').value      = dados.id_paciente;
+    document.getElementById('id_cliente').value      = dados.id_cliente;
+    document.getElementById('nome').value            = dados.nome             || '';
+    document.getElementById('especie').value         = dados.especie          || '';
+    document.getElementById('raca').value            = dados.raca             || '';
+    document.getElementById('sexo').value            = dados.sexo             || 'M';
+    document.getElementById('data_nascimento').value = dados.data_nascimento  || '';
+    document.getElementById('peso').value            = dados.peso             || '';
+    document.getElementById('observacoes').value     = dados.observacoes      || '';
+  }
+  openModal('modalPaciente');
+}
+
+async function editar(id) {
+  try {
+    const dados = await api('/pacientes/' + id);
+    abrirModal(dados);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function salvar() {
+  const id   = document.getElementById('pacienteId').value;
+  const body = {
+    id_cliente:      document.getElementById('id_cliente').value,
+    nome:            document.getElementById('nome').value.trim(),
+    especie:         document.getElementById('especie').value.trim(),
+    raca:            document.getElementById('raca').value.trim(),
+    sexo:            document.getElementById('sexo').value,
+    data_nascimento: document.getElementById('data_nascimento').value,
+    peso:            document.getElementById('peso').value,
+    observacoes:     document.getElementById('observacoes').value.trim(),
+  };
+  if (!body.id_cliente || !body.nome || !body.especie) {
+    toast('Tutor, nome e espécie são obrigatórios.', 'error'); return;
+  }
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (id) {
+      await api('/pacientes/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Paciente atualizado!');
+    } else {
+      await api('/pacientes', { method: 'POST', body: JSON.stringify(body) });
+      toast('Paciente cadastrado!');
+    }
+    closeModal('modalPaciente');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function verHistorico(id, nome) {
+  document.getElementById('historicoTitulo').textContent = `Histórico — ${nome}`;
+  document.getElementById('historicoConteudo').textContent = 'Carregando…';
+  openModal('modalHistorico');
+  try {
+    const lista = await api('/historico/' + id);
+    if (!lista.length) {
+      document.getElementById('historicoConteudo').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">${ICONS.consultas}</div><p>Nenhuma consulta registrada.</p></div>`;
+      return;
+    }
+    document.getElementById('historicoConteudo').innerHTML = `
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Data</th><th>Veterinário</th><th>Diagnóstico</th><th>Tratamento</th><th>Retorno</th></tr></thead>
+          <tbody>
+            ${lista.map(h => `<tr>
+              <td>${fmtDateTime(h.data_consulta)}</td>
+              <td>${escapeHtml(h.veterinario)}</td>
+              <td>${h.diagnostico ? escapeHtml(h.diagnostico) : '<span class="text-muted">—</span>'}</td>
+              <td>${h.tratamento ? escapeHtml(h.tratamento) : '<span class="text-muted">—</span>'}</td>
+              <td>${fmtDate(h.retorno_em)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    document.getElementById('historicoConteudo').textContent = 'Erro ao carregar histórico.';
+  }
+}
+
+let idParaExcluir = null;
+function confirmarExcluir(id, nome) {
+  idParaExcluir = id;
+  document.getElementById('nomeExcluir').textContent = nome;
+  openModal('modalExcluir');
+}
+document.getElementById('btnConfirmarExcluir').addEventListener('click', async () => {
+  try {
+    await api('/pacientes/' + idParaExcluir, { method: 'DELETE' });
+    toast('Paciente excluído.');
+    closeModal('modalExcluir');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+    closeModal('modalExcluir');
+  } finally { idParaExcluir = null; }
+});
+
+carregar();
+</script>
+</body>
+</html>

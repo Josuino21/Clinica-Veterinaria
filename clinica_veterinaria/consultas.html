@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consultas — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Consultas</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="abrirModal()">+ Registrar Consulta</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="card">
+        <!-- Filtro por paciente -->
+        <div class="search-bar">
+          <div class="form-group" style="flex:1;min-width:220px">
+            <select id="filtroPaciente" onchange="carregar()" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:.88rem">
+              <option value="">Todos os pacientes</option>
+            </select>
+          </div>
+          <button class="btn btn-outline" onclick="document.getElementById('filtroPaciente').value='';carregar()">Limpar</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Data</th>
+                <th>Paciente</th>
+                <th>Espécie</th>
+                <th>Tutor</th>
+                <th>Veterinário</th>
+                <th>Diagnóstico</th>
+                <th>Retorno</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="9" class="text-center text-muted" style="padding:28px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="totalInfo" class="text-muted mt-2"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Novo / Editar -->
+<div class="modal-overlay" id="modalConsulta">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Registrar Consulta</h2>
+      <button class="modal-close" onclick="closeModal('modalConsulta')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="formConsulta">
+        <input type="hidden" id="consultaId">
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Paciente *</label>
+            <select id="id_paciente" required onchange="onPacienteChange()">
+              <option value="">— Selecione —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Veterinário *</label>
+            <select id="id_veterinario" required>
+              <option value="">— Selecione —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Data e Hora *</label>
+            <input type="datetime-local" id="data_consulta" required>
+          </div>
+          <div class="form-group">
+            <label>Agendamento vinculado</label>
+            <select id="id_agendamento">
+              <option value="">— Nenhum —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Peso na consulta (kg)</label>
+            <input type="number" id="peso_consulta" step="0.01" min="0" placeholder="Ex.: 4.5">
+          </div>
+          <div class="form-group">
+            <label>Temperatura (°C)</label>
+            <input type="number" id="temperatura" step="0.1" min="30" max="45" placeholder="Ex.: 38.5">
+          </div>
+          <div class="form-group form-full">
+            <label>Diagnóstico</label>
+            <textarea id="diagnostico" placeholder="Descrição do diagnóstico…"></textarea>
+          </div>
+          <div class="form-group form-full">
+            <label>Tratamento</label>
+            <textarea id="tratamento" placeholder="Procedimentos e tratamentos realizados…"></textarea>
+          </div>
+          <div class="form-group form-full">
+            <label>Prescrição / Medicamentos</label>
+            <textarea id="prescricao" placeholder="Medicamentos prescritos, dosagem e frequência…"></textarea>
+          </div>
+          <div class="form-group form-full">
+            <label>Observações</label>
+            <textarea id="observacoes" placeholder="Informações adicionais…"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Data de Retorno</label>
+            <input type="date" id="retorno_em">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalConsulta')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvar" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Detalhes -->
+<div class="modal-overlay" id="modalDetalhe">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <h2>Detalhes da Consulta</h2>
+      <button class="modal-close" onclick="closeModal('modalDetalhe')">✕</button>
+    </div>
+    <div class="modal-body" id="detalheConteudo"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalDetalhe')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal-overlay" id="modalExcluir">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>Confirmar Exclusão</h2>
+      <button class="modal-close" onclick="closeModal('modalExcluir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Deseja excluir a consulta de <strong id="nomeExcluir"></strong>?</p>
+      <p class="text-muted mt-1">Esta ação não pode ser desfeita.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalExcluir')">Cancelar</button>
+      <button class="btn btn-danger" id="btnConfirmarExcluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('consultas');
+initNav('consultas');
+
+let todosPacientes = [];
+let agendamentosPaciente = [];
+
+async function carregarFiltros() {
+  todosPacientes = await api('/pacientes');
+  document.getElementById('filtroPaciente').innerHTML =
+    '<option value="">Todos os pacientes</option>' +
+    todosPacientes.map(p => `<option value="${p.id_paciente}">${escapeHtml(p.nome)} (${escapeHtml(p.dono)})</option>`).join('');
+}
+
+async function carregarSelects() {
+  const vets = await api('/veterinarios');
+  document.getElementById('id_paciente').innerHTML =
+    '<option value="">— Selecione —</option>' +
+    todosPacientes.map(p => `<option value="${p.id_paciente}">${escapeHtml(p.nome)} (${escapeHtml(p.dono)})</option>`).join('');
+  document.getElementById('id_veterinario').innerHTML =
+    '<option value="">— Selecione —</option>' +
+    vets.filter(v => v.ativo == 1)
+        .map(v => `<option value="${v.id_veterinario}">${escapeHtml(v.nome)}</option>`).join('');
+}
+
+async function onPacienteChange() {
+  const idPac = document.getElementById('id_paciente').value;
+  const sel = document.getElementById('id_agendamento');
+  sel.innerHTML = '<option value="">— Nenhum —</option>';
+  if (!idPac) return;
+  try {
+    const ags = await api('/agendamentos?status=agendado');
+    const filtrados = ags.filter(a => a.id_paciente == idPac);
+    if (filtrados.length) {
+      sel.innerHTML += filtrados.map(a =>
+        `<option value="${a.id_agendamento}">${fmtDateTime(a.data_hora)} — ${a.motivo || 'Sem motivo'}</option>`
+      ).join('');
+    }
+  } catch {}
+}
+
+async function carregar() {
+  const idPac = document.getElementById('filtroPaciente').value;
+  const qs = idPac ? '?paciente=' + idPac : '';
+  try {
+    const lista = await api('/consultas' + qs);
+    const tbody = document.getElementById('tbody');
+    document.getElementById('totalInfo').textContent = `${lista.length} consulta(s) encontrada(s).`;
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="9">
+        <div class="empty-state"><div class="empty-icon">${ICONS.consultas}</div><p>Nenhuma consulta encontrada.</p></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(c => `
+      <tr>
+        <td class="text-muted">${c.id_consulta}</td>
+        <td><strong>${fmtDateTime(c.data_consulta)}</strong></td>
+        <td>${escapeHtml(c.paciente)}</td>
+        <td><span class="badge badge-gray">${escapeHtml(c.especie)}</span></td>
+        <td class="text-muted">${escapeHtml(c.dono)}</td>
+        <td>${escapeHtml(c.veterinario)}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(c.diagnostico||'').replace(/"/g,'&quot;')}">
+          ${c.diagnostico ? escapeHtml(c.diagnostico.slice(0,60) + (c.diagnostico.length>60?'…':'')) : '<span class="text-muted">—</span>'}
+        </td>
+        <td>${fmtDate(c.retorno_em)}</td>
+        <td>
+          <div class="td-actions">
+            <button class="btn btn-outline btn-sm btn-icon" title="Detalhes" onclick="verDetalhe(${c.id_consulta})">${ICONS.search}</button>
+            <button class="btn btn-outline btn-sm btn-icon" title="Editar"   onclick="editar(${c.id_consulta})">${ICONS.edit}</button>
+            ${isAdmin() ? `<button class="btn btn-danger  btn-sm btn-icon" title="Excluir" onclick="confirmarExcluir(${c.id_consulta},${escapeJsAttr(c.paciente)})">${ICONS.trash}</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function abrirModal(dados = null) {
+  await carregarSelects();
+  document.getElementById('formConsulta').reset();
+  document.getElementById('consultaId').value = '';
+  document.getElementById('modalTitulo').textContent = 'Registrar Consulta';
+  // Data padrão = agora
+  const agora = new Date();
+  agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
+  document.getElementById('data_consulta').value = agora.toISOString().slice(0, 16);
+
+  if (dados) {
+    document.getElementById('modalTitulo').textContent      = 'Editar Consulta';
+    document.getElementById('consultaId').value             = dados.id_consulta;
+    document.getElementById('id_paciente').value            = dados.id_paciente;
+    document.getElementById('id_veterinario').value         = dados.id_veterinario;
+    document.getElementById('data_consulta').value          = (dados.data_consulta||'').replace(' ','T').slice(0,16);
+    document.getElementById('peso_consulta').value          = dados.peso_consulta   || '';
+    document.getElementById('temperatura').value            = dados.temperatura     || '';
+    document.getElementById('diagnostico').value            = dados.diagnostico     || '';
+    document.getElementById('tratamento').value             = dados.tratamento      || '';
+    document.getElementById('prescricao').value             = dados.prescricao      || '';
+    document.getElementById('observacoes').value            = dados.observacoes     || '';
+    document.getElementById('retorno_em').value             = dados.retorno_em      || '';
+    await onPacienteChange();
+    document.getElementById('id_agendamento').value         = dados.id_agendamento  || '';
+  }
+  openModal('modalConsulta');
+}
+
+async function editar(id) {
+  try {
+    const dados = await api('/consultas/' + id);
+    abrirModal(dados);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function verDetalhe(id) {
+  document.getElementById('detalheConteudo').innerHTML = 'Carregando…';
+  openModal('modalDetalhe');
+  try {
+    const c = await api('/consultas/' + id);
+    document.getElementById('detalheConteudo').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 24px" class="two-col-grid">
+        <div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Paciente</span><div><strong>${escapeHtml(c.paciente)}</strong> (${escapeHtml(c.especie)})</div></div>
+        <div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Tutor</span><div>${escapeHtml(c.dono)}</div></div>
+        <div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Veterinário</span><div>${escapeHtml(c.veterinario)}</div></div>
+        <div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Data</span><div>${fmtDateTime(c.data_consulta)}</div></div>
+        ${c.peso_consulta ? `<div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Peso</span><div>${c.peso_consulta} kg</div></div>` : ''}
+        ${c.temperatura   ? `<div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Temperatura</span><div>${c.temperatura} °C</div></div>` : ''}
+        ${c.retorno_em    ? `<div><span class="text-muted" style="font-size:.75rem;font-weight:600;text-transform:uppercase">Retorno</span><div>${fmtDate(c.retorno_em)}</div></div>` : ''}
+      </div>
+      ${c.diagnostico ? `<div class="mt-3"><strong>Diagnóstico</strong><p style="margin-top:6px;white-space:pre-wrap">${escapeHtml(c.diagnostico)}</p></div>` : ''}
+      ${c.tratamento  ? `<div class="mt-2"><strong>Tratamento</strong><p style="margin-top:6px;white-space:pre-wrap">${escapeHtml(c.tratamento)}</p></div>`  : ''}
+      ${c.prescricao  ? `<div class="mt-2"><strong>Prescrição</strong><p style="margin-top:6px;white-space:pre-wrap">${escapeHtml(c.prescricao)}</p></div>`   : ''}
+      ${c.observacoes ? `<div class="mt-2"><strong>Observações</strong><p style="margin-top:6px;white-space:pre-wrap">${escapeHtml(c.observacoes)}</p></div>` : ''}
+    `;
+  } catch (e) {
+    document.getElementById('detalheConteudo').textContent = 'Erro ao carregar detalhes.';
+  }
+}
+
+async function salvar() {
+  const id   = document.getElementById('consultaId').value;
+  const body = {
+    id_paciente:    document.getElementById('id_paciente').value,
+    id_veterinario: document.getElementById('id_veterinario').value,
+    data_consulta:  document.getElementById('data_consulta').value.replace('T',' '),
+    id_agendamento: document.getElementById('id_agendamento').value || null,
+    peso_consulta:  document.getElementById('peso_consulta').value  || null,
+    temperatura:    document.getElementById('temperatura').value    || null,
+    diagnostico:    document.getElementById('diagnostico').value.trim(),
+    tratamento:     document.getElementById('tratamento').value.trim(),
+    prescricao:     document.getElementById('prescricao').value.trim(),
+    observacoes:    document.getElementById('observacoes').value.trim(),
+    retorno_em:     document.getElementById('retorno_em').value     || null,
+  };
+  if (!body.id_paciente || !body.id_veterinario || !body.data_consulta) {
+    toast('Paciente, veterinário e data são obrigatórios.', 'error'); return;
+  }
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (id) {
+      await api('/consultas/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Consulta atualizada!');
+    } else {
+      await api('/consultas', { method: 'POST', body: JSON.stringify(body) });
+      toast('Consulta registrada!');
+    }
+    closeModal('modalConsulta');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let idParaExcluir = null;
+function confirmarExcluir(id, nome) {
+  idParaExcluir = id;
+  document.getElementById('nomeExcluir').textContent = nome;
+  openModal('modalExcluir');
+}
+document.getElementById('btnConfirmarExcluir').addEventListener('click', async () => {
+  try {
+    await api('/consultas/' + idParaExcluir, { method: 'DELETE' });
+    toast('Consulta excluída.');
+    closeModal('modalExcluir');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+    closeModal('modalExcluir');
+  } finally { idParaExcluir = null; }
+});
+
+(async () => {
+  await carregarFiltros();
+  carregar();
+})();
+</script>
+</body>
+</html>

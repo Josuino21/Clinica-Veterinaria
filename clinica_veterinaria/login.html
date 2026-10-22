@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .login-hint {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: .8rem;
+    color: #0369a1;
+    margin-top: 16px;
+  }
+  .login-hint strong { display: block; margin-bottom: 2px; }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn-loading .spinner { display: inline-block; }
+  .btn-loading span { display: none; }
+</style>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="logo-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="6.5" r="1.6"/><circle cx="12" cy="4.5" r="1.6"/><circle cx="17" cy="6.5" r="1.6"/><circle cx="19.2" cy="11" r="1.6"/><path d="M12 10.3c-3.2 0-6.6 2.4-6.6 5.9 0 2 1.6 3.2 3.5 3.2 1.1 0 1.9-.5 3.1-.5s2 .5 3.1.5c1.9 0 3.5-1.2 3.5-3.2 0-3.5-3.4-5.9-6.6-5.9z"/></svg></div>
+      <h1>VetSystem</h1>
+      <p>Sistema de Gestão de Clínica Veterinária</p>
+    </div>
+
+    <form id="loginForm">
+      <div class="form-group mb-2">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" placeholder="seu@email.com" required autocomplete="username">
+      </div>
+      <div class="form-group mb-2">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <div id="loginError" style="color:#dc2626;font-size:.85rem;margin-bottom:10px;display:none"></div>
+      <button type="submit" class="btn btn-primary w-full mt-2" id="loginBtn" style="justify-content:center;padding:11px">
+        <span>Entrar</span>
+        <div class="spinner"></div>
+      </button>
+    </form>
+
+    <div class="login-hint">
+      <strong>Acesso de demonstração</strong>
+      E-mail: admin@clinica.com &nbsp;|&nbsp; Senha: password
+    </div>
+  </div>
+</div>
+
+<script>
+const api = 'api/index.php';
+
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginError');
+  err.style.display = 'none';
+  btn.classList.add('btn-loading');
+
+  const email = document.getElementById('email').value.trim();
+  const senha = document.getElementById('senha').value;
+
+  try {
+    const csrfResponse = await fetch(api + '/csrf');
+    const csrfData = await csrfResponse.json();
+    const res = await fetch(api + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfData.csrf_token },
+      body: JSON.stringify({ email, senha })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Credenciais inválidas.');
+    sessionStorage.setItem('usuario', JSON.stringify(data.usuario));
+    window.location.href = 'index.html';
+  } catch (x) {
+    err.textContent = x.message;
+    err.style.display = 'block';
+  } finally {
+    btn.classList.remove('btn-loading');
+  }
+});
+</script>
+</body>
+</html>

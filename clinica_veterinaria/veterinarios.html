@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veterinários — VetSystem</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Abrir menu" id="menuToggleBtn"></button>
+      <h1>Veterinários</h1>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" id="btnNovoVet" onclick="abrirModal()">+ Novo Veterinário</button>
+      </div>
+    </header>
+
+    <main class="page-content">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Nome</th>
+                <th>CRMV</th>
+                <th>Especialidade</th>
+                <th>Telefone</th>
+                <th>E-mail</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr><td colspan="8" class="text-center text-muted" style="padding:28px">Carregando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="totalInfo" class="text-muted mt-2"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Modal Novo / Editar -->
+<div class="modal-overlay" id="modalVet">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Novo Veterinário</h2>
+      <button class="modal-close" onclick="closeModal('modalVet')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="formVet">
+        <input type="hidden" id="vetId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nome completo *</label>
+            <input type="text" id="nome" placeholder="Dr. Nome Sobrenome" required>
+          </div>
+          <div class="form-group">
+            <label>CRMV *</label>
+            <input type="text" id="crmv" placeholder="Ex.: 12345-SP" required>
+          </div>
+          <div class="form-group">
+            <label>Especialidade</label>
+            <input type="text" id="especialidade" placeholder="Ex.: Clínica Geral, Dermatologia…">
+          </div>
+          <div class="form-group">
+            <label>Telefone</label>
+            <input type="text" id="telefone" placeholder="(00) 00000-0000">
+          </div>
+          <div class="form-group">
+            <label>E-mail</label>
+            <input type="email" id="email" placeholder="vet@clinica.com">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="ativo">
+              <option value="1">Ativo</option>
+              <option value="0">Inativo</option>
+            </select>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalVet')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSalvar" onclick="salvar()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal-overlay" id="modalExcluir">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h2>Confirmar Exclusão</h2>
+      <button class="modal-close" onclick="closeModal('modalExcluir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Deseja excluir o veterinário <strong id="nomeExcluir"></strong>?</p>
+      <p class="text-muted mt-1">Veterinários com agendamentos ou consultas vinculadas não podem ser excluídos.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modalExcluir')">Cancelar</button>
+      <button class="btn btn-danger" id="btnConfirmarExcluir">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+requireAuth();
+document.getElementById('sidebar').innerHTML = renderSidebar('veterinarios');
+initNav('veterinarios');
+if (!isAdmin()) document.getElementById('btnNovoVet').style.display = 'none';
+
+async function carregar() {
+  try {
+    const lista = await api('/veterinarios');
+    const tbody = document.getElementById('tbody');
+    document.getElementById('totalInfo').textContent = `${lista.length} veterinário(s) cadastrado(s).`;
+
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="8">
+        <div class="empty-state"><div class="empty-icon">${ICONS.veterinarios}</div><p>Nenhum veterinário cadastrado.</p></div>
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = lista.map(v => `
+      <tr>
+        <td class="text-muted">${v.id_veterinario}</td>
+        <td><strong>${escapeHtml(v.nome)}</strong></td>
+        <td><span class="badge badge-primary">${escapeHtml(v.crmv)}</span></td>
+        <td>${v.especialidade ? escapeHtml(v.especialidade) : '<span class="text-muted">—</span>'}</td>
+        <td>${v.telefone ? escapeHtml(v.telefone) : '<span class="text-muted">—</span>'}</td>
+        <td>${v.email ? escapeHtml(v.email) : '<span class="text-muted">—</span>'}</td>
+        <td>
+          ${v.ativo == 1
+            ? '<span class="badge badge-success">Ativo</span>'
+            : '<span class="badge badge-gray">Inativo</span>'}
+        </td>
+        <td>
+          <div class="td-actions">
+            ${isAdmin() ? `<button class="btn btn-outline btn-sm btn-icon" title="Editar"  onclick="editar(${v.id_veterinario})">${ICONS.edit}</button>` : ''}
+            ${isAdmin() ? `<button class="btn btn-danger  btn-sm btn-icon" title="Excluir" onclick="confirmarExcluir(${v.id_veterinario},${escapeJsAttr(v.nome)})">${ICONS.trash}</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+function abrirModal(dados = null) {
+  document.getElementById('formVet').reset();
+  document.getElementById('vetId').value = '';
+  document.getElementById('modalTitulo').textContent = 'Novo Veterinário';
+  document.getElementById('ativo').value = '1';
+  if (dados) {
+    document.getElementById('modalTitulo').textContent = 'Editar Veterinário';
+    document.getElementById('vetId').value          = dados.id_veterinario;
+    document.getElementById('nome').value           = dados.nome           || '';
+    document.getElementById('crmv').value           = dados.crmv           || '';
+    document.getElementById('especialidade').value  = dados.especialidade  || '';
+    document.getElementById('telefone').value       = dados.telefone       || '';
+    document.getElementById('email').value          = dados.email          || '';
+    document.getElementById('ativo').value          = dados.ativo != null ? String(dados.ativo) : '1';
+  }
+  openModal('modalVet');
+}
+
+async function editar(id) {
+  try {
+    const dados = await api('/veterinarios/' + id);
+    abrirModal(dados);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function salvar() {
+  const id   = document.getElementById('vetId').value;
+  const body = {
+    nome:          document.getElementById('nome').value.trim(),
+    crmv:          document.getElementById('crmv').value.trim(),
+    especialidade: document.getElementById('especialidade').value.trim(),
+    telefone:      document.getElementById('telefone').value.trim(),
+    email:         document.getElementById('email').value.trim(),
+    ativo:         document.getElementById('ativo').value,
+  };
+  if (!body.nome || !body.crmv) { toast('Nome e CRMV são obrigatórios.', 'error'); return; }
+
+  const btn = document.getElementById('btnSalvar');
+  btn.disabled = true;
+  try {
+    if (id) {
+      await api('/veterinarios/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Veterinário atualizado!');
+    } else {
+      await api('/veterinarios', { method: 'POST', body: JSON.stringify(body) });
+      toast('Veterinário cadastrado!');
+    }
+    closeModal('modalVet');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let idParaExcluir = null;
+function confirmarExcluir(id, nome) {
+  idParaExcluir = id;
+  document.getElementById('nomeExcluir').textContent = nome;
+  openModal('modalExcluir');
+}
+document.getElementById('btnConfirmarExcluir').addEventListener('click', async () => {
+  try {
+    await api('/veterinarios/' + idParaExcluir, { method: 'DELETE' });
+    toast('Veterinário excluído.');
+    closeModal('modalExcluir');
+    carregar();
+  } catch (e) {
+    toast(e.message, 'error');
+    closeModal('modalExcluir');
+  } finally { idParaExcluir = null; }
+});
+
+carregar();
+</script>
+</body>
+</html>
